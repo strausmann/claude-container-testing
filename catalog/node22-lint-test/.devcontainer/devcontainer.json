@@ -1,0 +1,6 @@
+{
+  "name": "node22-lint-test",
+  "build": { "dockerfile": "Dockerfile" },
+  "containerEnv": { "CI": "true" },
+  "overrideCommand": true
+}

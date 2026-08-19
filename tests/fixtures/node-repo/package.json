@@ -1,0 +1,9 @@
+{
+  "name": "node-repo-fixture",
+  "private": true,
+  "version": "0.0.0",
+  "scripts": {
+    "test": "node --test",
+    "lint": "eslint ."
+  }
+}
