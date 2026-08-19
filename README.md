@@ -19,10 +19,18 @@ toolchain conflict) versus optional (fast local inner-loop iteration).
 
 ## Install
 
-As a Claude Code plugin, via the marketplace manifest in this repo
-(`plugin-marketplace.json`) — see Claude Code's plugin documentation for adding a marketplace
-and installing a plugin from it. Once installed, the `/ctest` command and the `container-testing`
-skill are available in any project.
+As a Claude Code plugin. This repo is a self-hosted marketplace (`.claude-plugin/marketplace.json`
+at the repo root, alongside `.claude-plugin/plugin.json`) — add it and install from it:
+
+```
+/plugin marketplace add strausmann/claude-container-testing
+/plugin install claude-container-testing@claude-container-testing
+```
+
+If the install summary reports `Run /reload-plugins to activate.`, run that command. Once
+installed, the `/ctest` command and the `container-testing` skill are available in any project.
+See Claude Code's [plugin marketplace docs](https://code.claude.com/docs/en/plugin-marketplaces)
+for background on the manifest format and other install routes (private repos, pinned refs, etc.).
 
 The plugin itself needs, on the host running Claude Code:
 
@@ -76,6 +84,12 @@ Examples:
 /ctest list
 /ctest prune
 ```
+
+**Known limitations:** concurrent runs against the same repo path + template config can collide
+(the container/project name is `sha256(repo+config)`, so two simultaneous runs on identical inputs
+share one label); `--cmd` word-splits on whitespace with no quote-awareness, so an internally-quoted
+multi-word argument mis-splits — keep `--cmd` to simple space-separated commands (e.g.
+`--cmd "golangci-lint run ./..."`, not `--cmd 'sh -c "echo hi"'`).
 
 ### Modes: `solo` vs `env`
 
