@@ -1,0 +1,4 @@
+*.log
+.DS_Store
+tests/**/node_modules
+tests/**/.devcontainer-build-cache

@@ -1,0 +1,1 @@
+{ "name": "claude-container-testing", "source": "github", "owner": "strausmann", "repo": "claude-container-testing", "description": "Reproducible container-based testing as a Claude Code plugin." }

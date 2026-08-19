@@ -1,0 +1,7 @@
+{
+  "name": "claude-container-testing",
+  "version": "0.1.0",
+  "description": "Run a repo's tests/lint/build in a reproducible, toolchain-decoupled dev container.",
+  "commands": "./commands",
+  "skills": "./skills"
+}
