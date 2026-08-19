@@ -1,3 +1,7 @@
+# Built by CI and published to
+# ghcr.io/strausmann/claude-container-testing/node22-lint-test (public package); the
+# pushed manifest digest is then pinned into this template's devcontainer.json.
+# See .github/workflows/publish-templates.yml.
 FROM node:22@sha256:0557ac14e0d45d02ed563067b82856ca5e7aa3437fa28d98d4350ea9c3d9494a
 
 # Pinned lint toolchain, baked into the image itself so it does NOT depend on

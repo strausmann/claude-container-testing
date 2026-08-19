@@ -1,3 +1,7 @@
+# Built by CI and published to
+# ghcr.io/strausmann/claude-container-testing/go1.23-test (public package); the
+# pushed manifest digest is then pinned into this template's devcontainer.json.
+# See .github/workflows/publish-templates.yml.
 FROM golang:1.23@sha256:60deed95d3888cc5e4d9ff8a10c54e5edc008c6ae3fba6187be6fb592e19e8c0
 
 # Pinned Go test toolchain, baked into the image itself so it does NOT depend on what's in the
