@@ -79,6 +79,15 @@ EOF
 
 # --- prune.sh -----------------------------------------------------------------------------
 
+# The tests below `docker tag` this as a stand-in for a stale/kept local image. A fresh CI
+# runner has no images cached at all, so pulling here (once for the whole file) is required --
+# without it, every `docker tag busybox:1.36 ...` fails with "No such image" and the tests fail
+# for a reason that has nothing to do with prune.sh itself. `docker pull` is idempotent, so this
+# is a no-op on a machine that already has the image.
+setup_file() {
+  docker pull busybox:1.36 >/dev/null
+}
+
 teardown() {
   # Belt-and-braces: never leave test-tagged images behind, even if a test fails mid-way.
   docker rmi ghcr.io/strausmann/claude-container-testing/prune-test-stale:bats-test >/dev/null 2>&1 || true
