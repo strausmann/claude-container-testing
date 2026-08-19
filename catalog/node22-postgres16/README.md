@@ -14,6 +14,8 @@ queries, instead of mocking the database. Runs via `docker compose` (a `runner` 
 | `orchestration` | `docker compose` (`.devcontainer/compose.test.yml`) |
 | `service` (devcontainer target) | `runner` |
 | `workspaceFolder` | `/workspace` |
+| `image` | none (upstream images only, never published to ghcr) |
+| `tasks` | target-repo-defined |
 
 | Component | Pinned version |
 |---|---|

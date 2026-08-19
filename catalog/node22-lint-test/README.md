@@ -4,6 +4,14 @@ Solo devcontainer template for repos that ship their own `package.json` test/lin
 Runs a target repo's `npm test` / `npm run lint` inside a reproducible container instead of
 depending on whatever toolchain happens to be installed on the host.
 
+## Manifest
+
+| Field | Value |
+|---|---|
+| `kind` | `solo` |
+| `image` | `ghcr.io/strausmann/claude-container-testing/node22-lint-test` |
+| `tasks` | `test`, `lint` |
+
 ## What's baked in
 
 The image bakes in Node 22 plus a **pinned, TypeScript-5-compatible** eslint toolchain — pinned

@@ -5,6 +5,14 @@ Solo devcontainer template for repos that ship a Go module (`go.mod`). Runs a ta
 reproducible container instead of depending on whatever Go toolchain happens to be installed on
 the host.
 
+## Manifest
+
+| Field | Value |
+|---|---|
+| `kind` | `solo` |
+| `image` | `ghcr.io/strausmann/claude-container-testing/go1.23-test` |
+| `tasks` | `test`, `vuln`, `lint` |
+
 ## What's baked in
 
 The image bakes in Go 1.23 plus a **pinned Go test toolchain** — pinned for the same reason as the
