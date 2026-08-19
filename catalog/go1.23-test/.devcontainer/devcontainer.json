@@ -1,9 +1,11 @@
 {
   "name": "go1.23-test",
-  "build": { "dockerfile": "Dockerfile" },
-  "containerEnv": { "CI": "true" },
+  "containerEnv": {
+    "CI": "true"
+  },
   "remoteEnv": {
     "PATH": "/go/bin:/usr/local/go/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
   },
-  "overrideCommand": true
+  "overrideCommand": true,
+  "image": "ghcr.io/strausmann/claude-container-testing/go1.23-test@sha256:bd8eae53f43c99a5ccc20439d8561ba5ae2737367bdfaa33265ae0a09a9ef8aa"
 }

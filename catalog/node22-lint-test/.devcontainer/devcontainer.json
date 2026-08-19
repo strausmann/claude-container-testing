@@ -1,6 +1,8 @@
 {
   "name": "node22-lint-test",
-  "build": { "dockerfile": "Dockerfile" },
-  "containerEnv": { "CI": "true" },
-  "overrideCommand": true
+  "containerEnv": {
+    "CI": "true"
+  },
+  "overrideCommand": true,
+  "image": "ghcr.io/strausmann/claude-container-testing/node22-lint-test@sha256:34a2eda9a5bc9a69f443373af0f44b021c1318f02b3918773c1b0a633ae79bd6"
 }
