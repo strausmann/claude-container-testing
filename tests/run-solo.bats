@@ -55,3 +55,9 @@ JSON
   rm -f "$cfg"
   [ "$status" -eq 3 ]
 }
+
+@test "solo run: go test passes in the go template" {
+  run bash "$SCRIPTS/run-solo.sh" "$ROOT/tests/fixtures/go-repo" \
+      "$ROOT/catalog/go1.23-test/.devcontainer/devcontainer.json" -- go test ./...
+  [ "$status" -eq 0 ]
+}
