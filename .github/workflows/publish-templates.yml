@@ -1,0 +1,227 @@
+name: Publish templates to ghcr
+
+# Publishes owned-layer (Dockerfile-having) catalog templates to
+# ghcr.io/strausmann/claude-container-testing/<template> on every push to `main` that touches a
+# template's .devcontainer/ dir, then pins each published template's devcontainer.json `image`
+# field to the resulting digest and commits that back to `main`.
+#
+# This is the ONLY place in this plugin where `devcontainer build --push true` runs. Everywhere
+# else (run-solo.sh's local-build fallback, run-env.sh) builds/pulls only, never pushes -- see
+# skills/container-testing/scripts/run-solo.sh and README.md "Two levels, not one".
+#
+# node22-postgres16 (kind: env, no owned Dockerfile -- see catalog/node22-postgres16/README.md)
+# has nothing to publish here; only templates with their own .devcontainer/Dockerfile qualify.
+#
+# ---------------------------------------------------------------------------------------------
+# OPEN VERIFICATION POINTS -- explicitly NOT assumed working, confirm on the first real run:
+#
+#   1. Whether the default GITHUB_TOKEN's `packages: write` scope is actually sufficient to
+#      push a brand-new, first-time PUBLIC container package to ghcr.io. A fresh ghcr package is
+#      documented to inherit the repository's visibility (public here), but GitHub's docs do not
+#      make the first-publish token-scope question unambiguous. See the "Docker login" and
+#      "Build, push, and re-pin" steps below.
+#   2. Whether that same GITHUB_TOKEN is sufficient for actions/delete-package-versions@v5 to
+#      delete (untagged) versions of a repo-owned container package -- see the prune steps at
+#      the bottom. If it is NOT sufficient, the prune step needs its own token/PAT scoped for
+#      this specifically -- kept separate from the classic delete-PAT used for the manual,
+#      human/Claude-triggered removal of faulty *tagged* images (Vault item
+#      `GitHub PAT - GHCR Image Cleanup`), which stays deliberate and is never wired into this
+#      automatic CI step.
+#   3. The digest-capture mechanism (docker inspect --format='{{index .RepoDigests 0}}', see the
+#      "Build, push, and re-pin" step) relies on a successful `docker push` populating the local
+#      image's RepoDigests -- this cannot be exercised in a sandbox without ghcr push scope, so
+#      it is unverified beyond reading Docker's documented behavior.
+#   4. Whether `devcontainer build --workspace-folder catalog/<template>` still rebuilds from
+#      that template's Dockerfile on a SECOND publish, i.e. once devcontainer.json already holds
+#      `image: …@sha256:<digest>` (no `build` key) from the first publish's commit. The
+#      Dockerfile file itself is never removed by that commit, but whether the CLI still treats
+#      the directory as build-based once devcontainer.json points at `image` instead of `build`
+#      has not been exercised end-to-end here (both templates are still in first-publish state
+#      as of this workflow's authoring). Confirm on this workflow's second real run.
+#   5. The `[skip ci]` loop-prevention marker (see "Commit and push the digest updates" below):
+#      GitHub's push-event processing is documented to skip triggering ANY workflow run when the
+#      head commit message contains `[skip ci]` (case-insensitive; also `[ci skip]`, `[no ci]`,
+#      `[skip actions]`, `[actions skip]`). That should suppress this workflow's own re-trigger
+#      on its own bot commit before it even starts -- the job-level `if` below is kept as a
+#      second, explicit guard in case that native behavior doesn't apply as expected here.
+# ---------------------------------------------------------------------------------------------
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'catalog/*/.devcontainer/**'
+
+permissions:
+  packages: write
+  contents: write
+
+# Defensive addition beyond the base requirement: prevents two overlapping publish runs from
+# racing on the "commit + push to main" step if catalog/*/.devcontainer/** changes twice in
+# quick succession. Not load-bearing for correctness of a single run.
+concurrency:
+  group: publish-templates-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    # Second guard against the loop this workflow's own bot commit would otherwise cause --
+    # see OPEN VERIFICATION POINTS #5 above. This reads the triggering push's head commit
+    # message via a job-level `if:` expression (evaluated by the Actions runner, not shell-
+    # interpolated), so it is not a shell-injection surface.
+    if: "!contains(github.event.head_commit.message, '[skip ci]') && !contains(github.event.head_commit.message, '[skip publish]')"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # Full history so "Determine changed templates" can diff github.event.before..after --
+          # a shallow (default depth-1) checkout would not have the `before` commit available.
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      # Same version pinned in skills/container-testing/scripts/devcontainer-bin.sh
+      # (CTEST_DEVCONTAINER_PIN) -- keep the two in sync.
+      - name: Install devcontainer CLI (pinned)
+        run: npm install -g @devcontainers/cli@0.80.0
+
+      # See OPEN VERIFICATION POINT #1. --password-stdin (rather than the brief's `-p` flag) is
+      # a deliberate, functionally-identical substitution: it avoids putting the token on the
+      # process's own command line (visible via /proc/<pid>/cmdline for the duration of the
+      # call), which -p does not. Same login, safer form.
+      - name: Docker login to ghcr.io
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_ACTOR: ${{ github.actor }}
+        run: echo "$GH_TOKEN" | docker login ghcr.io -u "$GH_ACTOR" --password-stdin
+
+      # Diffs the triggering push's before..after range for files under catalog/<name>/.devcontainer/,
+      # then keeps only the names that also have an owned Dockerfile (Node/Go templates) --
+      # node22-postgres16 (env-kind, upstream images only) never has a Dockerfile there and is
+      # correctly excluded even if its compose file changed in the same push.
+      - name: Determine changed owned-layer templates
+        id: changed
+        env:
+          BEFORE_SHA: ${{ github.event.before }}
+          AFTER_SHA: ${{ github.event.after }}
+        run: |
+          set -euo pipefail
+          if [ -z "$BEFORE_SHA" ] || [ "$BEFORE_SHA" = "0000000000000000000000000000000000000000" ]; then
+            # First push on this ref (or no prior known sha, e.g. a newly created branch) --
+            # fall back to diffing the single triggering commit against its own parent.
+            range="${AFTER_SHA}~1..${AFTER_SHA}"
+          else
+            range="${BEFORE_SHA}..${AFTER_SHA}"
+          fi
+          changed_files="$(git diff --name-only "$range")"
+          echo "Changed files in this push ($range):"
+          printf '%s\n' "$changed_files"
+
+          templates=""
+          for dockerfile in catalog/*/.devcontainer/Dockerfile; do
+            [ -f "$dockerfile" ] || continue
+            name="$(basename "$(dirname "$(dirname "$dockerfile")")")"
+            if printf '%s\n' "$changed_files" | grep -q "^catalog/$name/\.devcontainer/"; then
+              templates="$templates $name"
+            fi
+          done
+          templates="$(echo "$templates" | xargs)"
+          echo "Owned-layer templates to publish: ${templates:-<none>}"
+          echo "templates=$templates" >> "$GITHUB_OUTPUT"
+
+      # For each changed owned-layer template: build against its OWN Dockerfile (workspace-folder
+      # IS the template dir, so relative Dockerfile paths resolve correctly -- see run-solo.sh's
+      # header comment point 2, and OPEN VERIFICATION POINT #4 above for why this still applies
+      # once devcontainer.json holds `image` instead of `build`), push it tagged with the short
+      # commit sha, capture the resulting manifest digest, then rewrite that template's
+      # devcontainer.json to reference the digest-pinned image -- replacing `build` on a template's
+      # first publish, or the previous digest on every publish after (see OPEN VERIFICATION
+      # POINT #3 for how the digest is captured).
+      - name: Build, push, and re-pin each changed template
+        if: steps.changed.outputs.templates != ''
+        env:
+          TEMPLATES: ${{ steps.changed.outputs.templates }}
+        run: |
+          set -euo pipefail
+          short_sha="$(git rev-parse --short HEAD)"
+          for name in $TEMPLATES; do
+            echo "::group::Publishing $name"
+            image_ref="ghcr.io/strausmann/claude-container-testing/$name:$short_sha"
+
+            devcontainer build --workspace-folder "catalog/$name" \
+              --push true --image-name "$image_ref"
+
+            digest_ref="$(docker inspect --format='{{index .RepoDigests 0}}' "$image_ref")"
+            digest="${digest_ref##*@}"
+            if [ -z "$digest" ] || [ "$digest" = "$digest_ref" ]; then
+              echo "::error::could not determine the pushed manifest digest for $name (RepoDigests: '$digest_ref')"
+              exit 1
+            fi
+
+            pinned="ghcr.io/strausmann/claude-container-testing/$name@$digest"
+            echo "$name -> $pinned"
+
+            # Same normalization run-solo.sh's build_local_image fallback already applies: drop
+            # any build-related keys, set image to the concrete reference. A no-op on
+            # build/dockerFile/context when they're already absent (subsequent publishes).
+            jq --arg img "$pinned" 'del(.build, .dockerFile, .context) | .image = $img' \
+              "catalog/$name/.devcontainer/devcontainer.json" > /tmp/devcontainer.json.new
+            mv /tmp/devcontainer.json.new "catalog/$name/.devcontainer/devcontainer.json"
+            echo "::endgroup::"
+          done
+
+      # One bot commit for however many templates changed in this push, not one per template --
+      # keeps "prune runs in the same job right after the push" (below) working off a single,
+      # known-pushed state. `[skip ci]` in the message is the loop-prevention mechanism -- see
+      # OPEN VERIFICATION POINT #5.
+      - name: Commit and push the digest updates
+        if: steps.changed.outputs.templates != ''
+        env:
+          TEMPLATES: ${{ steps.changed.outputs.templates }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          if git diff --quiet -- catalog; then
+            echo "No devcontainer.json changes to commit (build produced an identical digest)"
+            exit 0
+          fi
+
+          git add catalog/*/.devcontainer/devcontainer.json
+          git commit -m "chore(catalog): pin published digest(s) [skip ci]" \
+                      -m "Templates published: $TEMPLATES"
+          git push origin HEAD:main
+
+      # --- Prune untagged/orphaned versions of the just-published package(s) ---------------------
+      #
+      # actions/delete-package-versions@v5 takes a fixed `package-name` input per step -- it can't
+      # be parameterized by a runtime bash loop the way the build/rewrite loop above is. The
+      # catalog currently has exactly two owned-layer (Dockerfile-having) templates, so this is
+      # two static, conditional steps rather than a dynamic one. FLAGGED FOR REVIEW: if a third
+      # owned-layer template is added to the catalog, add a corresponding step here.
+      #
+      # delete-only-untagged-versions is ALWAYS true here, never false -- a tagged version (the
+      # short-sha tag each build above just pushed, or any digest an older devcontainer.json
+      # commit still references) is a reproducibility guarantee, not clutter, and this step must
+      # never touch it. This only touches versions of the package(s) just published in this job
+      # run, never the whole registry. See OPEN VERIFICATION POINT #2 for the token-scope caveat.
+      - name: Prune untagged versions of go1.23-test
+        if: contains(steps.changed.outputs.templates, 'go1.23-test')
+        uses: actions/delete-package-versions@v5
+        with:
+          package-type: container
+          package-name: claude-container-testing/go1.23-test
+          delete-only-untagged-versions: true
+
+      - name: Prune untagged versions of node22-lint-test
+        if: contains(steps.changed.outputs.templates, 'node22-lint-test')
+        uses: actions/delete-package-versions@v5
+        with:
+          package-type: container
+          package-name: claude-container-testing/node22-lint-test
+          delete-only-untagged-versions: true

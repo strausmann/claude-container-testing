@@ -1,0 +1,49 @@
+name: CI
+
+# Hard gate: the bats suite (tests/*.bats) is the real test of this plugin's scripts, and it
+# exercises Docker directly (run-solo.bats / run-env.bats actually build and run containers) --
+# GitHub-hosted ubuntu runners ship Docker + the compose plugin out of the box, so no dind setup
+# is needed here. Nothing in this workflow uses `continue-on-error` or `|| true`: a failing test,
+# or catalog/INDEX.md drift, fails the run.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      # Same version pinned in skills/container-testing/scripts/devcontainer-bin.sh
+      # (CTEST_DEVCONTAINER_PIN) -- keep the two in sync.
+      - name: Install devcontainer CLI (pinned)
+        run: npm install -g @devcontainers/cli@0.80.0
+
+      - name: Install bats
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y bats
+
+      - name: Run bats suite
+        run: bats tests/
+
+      # Drift gate: catalog/INDEX.md is generated (scripts/generate-index.sh), not hand-edited.
+      # Regenerate it and fail if that changes anything the commit didn't already include -- i.e.
+      # someone edited a template README's `## Manifest` block without re-running the generator.
+      - name: Regenerate catalog/INDEX.md
+        run: bash scripts/generate-index.sh
+
+      - name: Fail on catalog/INDEX.md drift
+        run: git diff --exit-code catalog/INDEX.md
