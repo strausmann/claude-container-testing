@@ -8,26 +8,30 @@ depending on whatever toolchain happens to be installed on the host.
 
 The image bakes in Node 22 plus a **pinned, TypeScript-5-compatible** eslint toolchain — pinned
 specifically because a target repo's own local TypeScript-7-preview compiler was found to break
-`typescript-eslint@8` (the toolchain drift that unblocked mcp-dockhand#213). Baking the toolchain
-into the image means it does **not** depend on what's in the mounted target repo — only the
-target repo's own app dependencies (its own `npm ci`) stay with the target repo.
+`typescript-eslint@8`. The exact versions and package architecture below were confirmed against
+[mcp-dockhand#221](https://github.com/strausmann/mcp-dockhand/pull/221) (`scripts/lint-in-container.sh`
+there), the PR that actually closed mcp-dockhand#213 — it uses the **unified** `typescript-eslint`
+meta-package (a single install), not the older split `@typescript-eslint/parser` +
+`@typescript-eslint/eslint-plugin` pair. Baking the toolchain into the image means it does **not**
+depend on what's in the mounted target repo — only the target repo's own app dependencies (its own
+`npm ci`) stay with the target repo.
 
 | Component | Version |
 |---|---|
 | Node.js | 22 (base image, digest-pinned — see `.devcontainer/Dockerfile`) |
-| typescript | 5.6.3 |
-| eslint | 9.13.0 |
-| @typescript-eslint/parser | 8.13.0 |
-| @typescript-eslint/eslint-plugin | 8.13.0 |
+| typescript | 5.9.3 |
+| eslint | 10.8.1 |
+| typescript-eslint (unified) | 8.67.0 |
 
 ## Tasks
 
 - `test` — runs the target repo's `npm test` (expects a `test` script, e.g. `node --test`)
 - `lint` — runs the target repo's `npm run lint` (expects a `lint` script, e.g. `eslint .`)
 
-The pinned TS-5 lint toolchain is invoked as the exec command by `run-solo.sh`, mirroring
-mcp-dockhand#213's container-lint pattern — the difference being that the toolchain now ships
-inside the image itself, instead of being assumed present in the target repo or on the host.
+The pinned TS-5 lint toolchain is invoked as the exec command by `run-solo.sh`, mirroring the
+container-lint pattern from [mcp-dockhand#221](https://github.com/strausmann/mcp-dockhand/pull/221)
+(the fix for mcp-dockhand#213) — the difference being that the toolchain now ships inside the image
+itself, instead of being reinstalled into a throwaway container on every run.
 
 ## Usage
 
