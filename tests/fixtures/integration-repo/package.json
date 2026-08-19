@@ -1,0 +1,11 @@
+{
+  "name": "integration-repo-fixture",
+  "private": true,
+  "version": "0.0.0",
+  "dependencies": {
+    "pg": "^8.13.0"
+  },
+  "scripts": {
+    "test": "npm install --no-audit --no-fund --silent && node test.js"
+  }
+}

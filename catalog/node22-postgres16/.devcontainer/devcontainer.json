@@ -1,0 +1,7 @@
+{
+  "name": "node22-postgres16",
+  "dockerComposeFile": "compose.test.yml",
+  "service": "runner",
+  "workspaceFolder": "/workspace",
+  "overrideCommand": true
+}
