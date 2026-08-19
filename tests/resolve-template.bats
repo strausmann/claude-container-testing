@@ -19,3 +19,30 @@ setup() { SCRIPTS="$BATS_TEST_DIRNAME/../skills/container-testing/scripts"; }
   [ "$status" -eq 0 ]
   [[ "$output" == npx*@devcontainers/cli* ]]
 }
+
+@test "detects node repo -> node template, solo" {
+  repo="$(mktemp -d)"; echo '{}' > "$repo/package.json"
+  cat="$(mktemp -d)"; mkdir -p "$cat/node22-lint-test/.devcontainer" "$cat/go1.23-test/.devcontainer"
+  run bash "$SCRIPTS/resolve-template.sh" "$repo" "$cat"
+  [ "$status" -eq 0 ]; [[ "$output" == "node22-lint-test solo" ]]
+}
+
+@test "detects go repo -> go template, solo" {
+  repo="$(mktemp -d)"; echo 'module x' > "$repo/go.mod"
+  cat="$(mktemp -d)"; mkdir -p "$cat/node22-lint-test/.devcontainer" "$cat/go1.23-test/.devcontainer"
+  run bash "$SCRIPTS/resolve-template.sh" "$repo" "$cat"
+  [ "$status" -eq 0 ]; [[ "$output" == "go1.23-test solo" ]]
+}
+
+@test "detects compose.test.yml -> env mode" {
+  repo="$(mktemp -d)"; echo '{}' > "$repo/package.json"; touch "$repo/compose.test.yml"
+  cat="$(mktemp -d)"; mkdir -p "$cat/node22-postgres16/.devcontainer"
+  run bash "$SCRIPTS/resolve-template.sh" "$repo" "$cat"
+  [ "$status" -eq 0 ]; [[ "$output" == node22-postgres16\ env ]] || [[ "$output" == *" env" ]]
+}
+
+@test "unknown toolchain exits non-zero with guidance" {
+  repo="$(mktemp -d)"; cat="$(mktemp -d)"
+  run bash "$SCRIPTS/resolve-template.sh" "$repo" "$cat"
+  [ "$status" -ne 0 ]; [[ "$output" == *"--template"* ]]
+}
